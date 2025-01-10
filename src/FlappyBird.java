@@ -1,4 +1,3 @@
-// Fix pipe, I saw one start not at the top of the screen.
 // There are some pipes that are impossible to clear. Address that.
 // Make gravity more realistic/jump mechanic. Look at Celeste??
 // Art Changes: Cat with a jetpack. Ketchup-fuelled.
@@ -57,7 +56,10 @@ public class FlappyBird extends JPanel implements ActionListener, KeyListener {
     }
 
     private void placePipes() {
-        int randomPipeY = (int) (Math.random() * boardHeight / 2 - boardHeight / 4);
+        int minPipeY = -480;
+        int maxPipeY = 0;
+        int randomPipeY = minPipeY + (int) (Math.random() * (maxPipeY - minPipeY));
+
         int openingSpace = boardHeight / 4;
 
         pipes.add(new Pipe(boardWidth, randomPipeY, 64, 512, imgPipeTop));
