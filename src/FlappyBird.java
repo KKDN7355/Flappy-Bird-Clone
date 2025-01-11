@@ -1,14 +1,11 @@
-// There are some pipes that are impossible to clear. Address that.
-// Make gravity more realistic/jump mechanic. Look at Celeste??
-// Art Changes: Cat with a jetpack. Ketchup-fuelled.
-
 import java.awt.*;
 import java.awt.event.*;
 import java.util.ArrayList;
 import javax.swing.*;
+import java.io.File;
+import java.io.IOException;
 
 public class FlappyBird extends JPanel implements ActionListener, KeyListener {
-
     private final int boardWidth = 360;
     private final int boardHeight = 640;
 
@@ -23,6 +20,9 @@ public class FlappyBird extends JPanel implements ActionListener, KeyListener {
     private final Timer gameLoop;
     private final Timer pipeTimer;
 
+    private Font customFont;
+
+
     private int velocityY = 0;
     private final int gravity = 1;
     private final int velocityX = -4;
@@ -36,15 +36,25 @@ public class FlappyBird extends JPanel implements ActionListener, KeyListener {
         setFocusable(true);
         addKeyListener(this);
 
-        imgBackground   = loadImage("./image_background.png");
-        imgBird         = loadImage("./image_bird.png");
-        imgPipeTop      = loadImage("./image_pipe_top.png");
-        imgPipeBot      = loadImage("./image_pipe_bot.png");
+        imgBackground   = loadImage("./images/background.png");
+        imgBird         = loadImage("./images/cat.png");
+        imgPipeTop      = loadImage("./images/pipe_top.png");
+        imgPipeBot      = loadImage("./images/pipe_bot.png");
 
-        bird = new Bird(boardWidth / 8, boardHeight / 2, 34, 24, imgBird);
+        try {
+            customFont = Font.createFont(Font.TRUETYPE_FONT, new File("./fonts/bit5x3.ttf"))
+                              .deriveFont(32f);
+            GraphicsEnvironment ge = GraphicsEnvironment.getLocalGraphicsEnvironment();
+            ge.registerFont(customFont);
+        } catch (FontFormatException | IOException e) {
+            ((Throwable) e).printStackTrace();
+            customFont = new Font("Arial", Font.PLAIN, 32);
+        }
+        
+        bird = new Bird(boardWidth / 8, boardHeight / 2, 30, 30, imgBird);
         pipes = new ArrayList<>();
 
-        pipeTimer = new Timer(1500, e -> placePipes());
+        pipeTimer = new Timer(1800, e -> placePipes());
         pipeTimer.start();
 
         gameLoop = new Timer(1000 / 60, this);
@@ -57,13 +67,13 @@ public class FlappyBird extends JPanel implements ActionListener, KeyListener {
 
     private void placePipes() {
         int minPipeY = -480;
-        int maxPipeY = 0;
+        int maxPipeY = -40;
         int randomPipeY = minPipeY + (int) (Math.random() * (maxPipeY - minPipeY));
 
         int openingSpace = boardHeight / 4;
 
-        pipes.add(new Pipe(boardWidth, randomPipeY, 64, 512, imgPipeTop));
-        pipes.add(new Pipe(boardWidth, randomPipeY + 512 + openingSpace, 64, 512, imgPipeBot));
+        pipes.add(new Pipe(boardWidth, randomPipeY, 50, 500, imgPipeTop));
+        pipes.add(new Pipe(boardWidth, randomPipeY + 500 + openingSpace, 50, 500, imgPipeBot));
     }
 
     @Override
@@ -80,8 +90,17 @@ public class FlappyBird extends JPanel implements ActionListener, KeyListener {
         }
 
         g.setColor(Color.white);
-        g.setFont(new Font("Arial", Font.PLAIN, 32));
-        g.drawString(gameOver ? "Game Over: " + (int) score : String.valueOf((int) score), 10, 35);
+        g.setFont(customFont.deriveFont(48f));
+
+        // Get the FontMetrics to calculate text width
+        FontMetrics metrics = g.getFontMetrics(g.getFont());
+        String scoreText = gameOver ? "Game Over: " + (int) score : String.valueOf((int) score);
+        int textWidth = metrics.stringWidth(scoreText);
+
+        // Draw the score text at the center of the screen
+        int x = (boardWidth - textWidth) / 2; // Center horizontally
+        int y = boardHeight / 4; // Position vertically at 1/4th of the screen height
+        g.drawString(scoreText, x, y);
     }
 
     private void move() {
@@ -131,7 +150,7 @@ public class FlappyBird extends JPanel implements ActionListener, KeyListener {
     @Override
     public void keyPressed(KeyEvent e) {
         if (e.getKeyCode() == KeyEvent.VK_SPACE) {
-            velocityY = -9;
+            velocityY = -10;
             if (gameOver) {
                 resetGame();
             }
