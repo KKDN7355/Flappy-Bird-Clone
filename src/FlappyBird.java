@@ -2,18 +2,22 @@ import java.awt.*;
 import java.awt.event.*;
 import java.util.ArrayList;
 import javax.swing.*;
-import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
+
 
 public class FlappyBird extends JPanel implements ActionListener, KeyListener {
     private final int boardWidth = 360;
     private final int boardHeight = 640;
 
-    private final Image imgBackground;
-    private final Image imgBird;
-    private final Image imgBirdTop;
-    private final Image imgBirdBot;
+    private final Image imgGameBackground;
+    private final Image imgGameTutorial;
+    private final Image imgGameOver;
+
+    private final Image imgBirdA;
+    private final Image imgBirdB;
+    private final Image imgBirdC;
+
     private final Image imgPipeTop;
     private final Image imgPipeBot;
 
@@ -21,11 +25,9 @@ public class FlappyBird extends JPanel implements ActionListener, KeyListener {
     private final ArrayList<Pipe> pipes;
 
     private final Timer gameLoop;
+    private final Timer birdAnimationTimer;
     private final Timer pipeTimer;
-    private final Timer activityTimer;
-
-    private long lastActivityTime = System.currentTimeMillis();
-
+    
     private Font customFont;
 
     private int velocityY = 0;
@@ -41,16 +43,21 @@ public class FlappyBird extends JPanel implements ActionListener, KeyListener {
         setFocusable(true);
         addKeyListener(this);
 
-        imgBackground = loadImage("./images/background.png");
-        imgBird = loadImage("./images/cat.png");
-        imgBirdTop = loadImage("./images/cat_top.png");
-        imgBirdBot = loadImage("./images/cat_bot.png");
+        imgGameBackground = loadImage("./images/game_background.png");
+        imgGameTutorial = loadImage("./images/game_tutorial.png");
+        imgGameOver  = loadImage("./images/game_over.png");
+        
         imgPipeTop = loadImage("./images/pipe_top.png");
         imgPipeBot = loadImage("./images/pipe_bot.png");
 
-        initializeCustomFont();
+        imgBirdA = loadImage("./images/bird_a.png");
+        imgBirdB = loadImage("./images/bird_b.png");
+        imgBirdC = loadImage("./images/bird_c.png");
 
-        bird = new Bird(boardWidth / 8, boardHeight / 2, 30, 30, imgBird, imgBirdTop, imgBirdBot);
+        initialiseCustomFont();
+
+        bird = new Bird(boardWidth / 8, boardHeight / 2, 30, 30, imgBirdA, imgBirdB, imgBirdC);
+
         pipes = new ArrayList<>();
 
         pipeTimer = new Timer(1800, e -> placePipes());
@@ -59,13 +66,13 @@ public class FlappyBird extends JPanel implements ActionListener, KeyListener {
         gameLoop = new Timer(1000 / 60, this);
         gameLoop.start();
 
-        activityTimer = new Timer(100, e -> checkInactivity());
-        activityTimer.start();
+        birdAnimationTimer = new Timer(100, e -> bird.nextFrame());
+        birdAnimationTimer.start();
     }
 
-    private void initializeCustomFont() {
+    private void initialiseCustomFont() {
         try {
-            InputStream fontStream = getClass().getResourceAsStream("/fonts/bit5x3.ttf");
+            InputStream fontStream = getClass().getResourceAsStream("/fonts/flappyfont.TTF");
             if (fontStream == null) {
                 throw new IOException("Font file not found in resources");
             }
@@ -77,8 +84,6 @@ public class FlappyBird extends JPanel implements ActionListener, KeyListener {
             System.out.println("Using default font due to error: " + e.getMessage());
             customFont = new Font("Arial", Font.PLAIN, 32);
         }
-        System.out.println(new File("src/fonts/bit5x3.ttf").getAbsolutePath());
-
     }
     
     private Image loadImage(String path) {
@@ -95,25 +100,6 @@ public class FlappyBird extends JPanel implements ActionListener, KeyListener {
         pipes.add(new Pipe(boardWidth, randomPipeY + 500 + openingSpace, 50, 500, imgPipeBot));
     }
 
-    private void checkInactivity() {
-        long currentTime = System.currentTimeMillis();
-        long timeSinceLastActivity = currentTime - lastActivityTime;
-    
-        if (timeSinceLastActivity < 250) {
-            // Set bird's image to top position when active (recent key press)
-            System.out.println("setImageToTop()");
-            bird.setImageToTop();
-        } else if (timeSinceLastActivity >= 250 && timeSinceLastActivity <= 500) {
-            // Set bird's image to default position after a short delay
-            System.out.println("setImageToDefault()");
-            bird.setImageToDefault();
-        } else if (timeSinceLastActivity > 500) {
-            // Set bird's image to bottom position after inactivity
-            System.out.println("setImageToBot()");
-            bird.setImageToBot();
-        }
-    }
-
     @Override
     public void paintComponent(Graphics g) {
         super.paintComponent(g);
@@ -121,7 +107,7 @@ public class FlappyBird extends JPanel implements ActionListener, KeyListener {
     }
 
     private void draw(Graphics g) {
-        g.drawImage(imgBackground, 0, 0, boardWidth, boardHeight, null);
+        g.drawImage(imgGameBackground, 0, 0, boardWidth, boardHeight, null);
         bird.draw(g);
         for (Pipe pipe : pipes) {
             pipe.draw(g);
@@ -168,6 +154,7 @@ public class FlappyBird extends JPanel implements ActionListener, KeyListener {
         move();
         repaint();
         if (gameOver) {
+            birdAnimationTimer.stop();
             pipeTimer.stop();
             gameLoop.stop();
         }
@@ -177,7 +164,6 @@ public class FlappyBird extends JPanel implements ActionListener, KeyListener {
     public void keyPressed(KeyEvent e) {
         if (e.getKeyCode() == KeyEvent.VK_SPACE) {
             velocityY = -10;
-            lastActivityTime = System.currentTimeMillis();
             if (gameOver) {
                 resetGame();
             }
@@ -192,8 +178,9 @@ public class FlappyBird extends JPanel implements ActionListener, KeyListener {
         velocityY = 0;
         pipeTimer.start();
         gameLoop.start();
+        birdAnimationTimer.start();
     }
-
+    
     @Override
     public void keyTyped(KeyEvent e) {}
 
@@ -202,56 +189,48 @@ public class FlappyBird extends JPanel implements ActionListener, KeyListener {
 
     private static class Bird {
         private int x, y, width, height;
+        private Image[] animationFrames;
+        private int currentFrame;
         private Image imgCurrent;
-        private final Image img;
-        private final Image imgTop;
-        private final Image imgBot;
-
-        Bird(int x, int y, int width, int height, Image img, Image imgTop, Image imgBot) {
+    
+        Bird(int x, int y, int width, int height, Image... frames) {
             this.x = x;
             this.y = y;
             this.width = width;
             this.height = height;
-            this.imgCurrent = img;
-            this.img = img;
-            this.imgTop = imgTop;
-            this.imgBot = imgBot;
+            this.animationFrames = frames;
+            this.currentFrame = 0;
+            this.imgCurrent = frames[0];
         }
-
-        void setImageToTop() {
-            this.imgCurrent = imgTop;
+    
+        void nextFrame() {
+            currentFrame = (currentFrame + 1) % animationFrames.length;
+            imgCurrent = animationFrames[currentFrame];
         }
-
-        void setImageToDefault() {
-            this.imgCurrent = img;
-        }
-
-        void setImageToBot() {
-            this.imgCurrent = imgBot;
-        }
-
+    
         void draw(Graphics g) {
             g.drawImage(imgCurrent, x, y, width, height, null);
         }
-
+    
         boolean collidesWith(Pipe pipe) {
             return x < pipe.getX() + pipe.getWidth() &&
                    x + width > pipe.getX() &&
                    y < pipe.getY() + pipe.getHeight() &&
                    y + height > pipe.getY();
         }
-
+    
         void reset(int startX, int startY) {
             this.x = startX;
             this.y = startY;
-            this.imgCurrent = img;
+            this.currentFrame = 0;
+            this.imgCurrent = animationFrames[0];
         }
-
+    
         int getX() {
             return x;
         }
     }
-
+    
     private static class Pipe {
         private int x, y, width, height;
         private final Image img;
