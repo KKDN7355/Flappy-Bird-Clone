@@ -15,14 +15,14 @@ public class FlappyBird extends JPanel implements ActionListener, KeyListener {
     private static final int BOARD_WIDTH = 360;
     private static final int BOARD_HEIGHT = 640;
     private static final int VELOCITY_X = -4;
-    private int gravity = 1;
     
     // Resources
     private BufferedImage imgGameBackground, imgGameTutorial, imgGameOver;
     private BufferedImage imgBirdA, imgBirdB, imgBirdC;
     private BufferedImage imgPipeTop, imgPipeBot;
-    private static BufferedImage imgGravityInverter;
+    private BufferedImage imgGravityInverter;
     private Font customFont;
+    private Clip backgroundMusic;
 
     // Game Objects
     private Bird bird;
@@ -31,21 +31,22 @@ public class FlappyBird extends JPanel implements ActionListener, KeyListener {
     // Timers
     private Timer gameTimer, birdTimer, pipeTimer, fadeTimer;
 
-    // Game State
+    // Game state
+    private int gravity = 1;
     private int velocityY = 0;
     private boolean showTutorial = true;
+    private boolean gameOver = false;
+    private boolean gravityInverted = false;
     private float tutorialAlpha = 1.0f;
     private double score = 0;
     private double bestScore = 0;
-    private boolean gameOver = false;
-    private boolean gravityInverted = false;
     private int pipeCounter = 0;
     
     public FlappyBird() {
         initUI();
         initResources();
         initGameObjects();
-        initGameTimers();
+        resetGame();
     }
 
     private void initUI() {
@@ -67,26 +68,6 @@ public class FlappyBird extends JPanel implements ActionListener, KeyListener {
         loadCustomFont();
     }
 
-    private BufferedImage loadImage(String path) {
-        try {
-            return ImageIO.read(getClass().getResource(path));
-        } catch (IOException e) {
-            e.printStackTrace();
-            return null;
-        }
-    }
-
-    private void loadCustomFont() {
-        try (InputStream fontStream = getClass().getResourceAsStream("/fonts/flappyfont.TTF")) {
-            if (fontStream == null) throw new IOException("Font file not found");
-            customFont = Font.createFont(Font.TRUETYPE_FONT, fontStream).deriveFont(32f);
-            GraphicsEnvironment.getLocalGraphicsEnvironment().registerFont(customFont);
-        } catch (FontFormatException | IOException e) {
-            System.err.println("Using default font: " + e.getMessage());
-            customFont = new Font("Arial", Font.PLAIN, 32);
-        }
-    }
-
     private void initGameObjects() {
         int birdWidth = imgBirdB.getWidth() * 2 / 3;
         int birdHeight = imgBirdB.getHeight() * 2 / 3;
@@ -102,6 +83,46 @@ public class FlappyBird extends JPanel implements ActionListener, KeyListener {
 
         birdTimer = new Timer(100, e -> bird.nextFrame());
         birdTimer.start();
+    }
+
+    // Game Logic
+    private void resetGame() {
+        stopTimers();
+        stopBackgroundMusic();
+        
+        bird.reset(BOARD_WIDTH / 8, BOARD_HEIGHT / 2);
+        pipes.clear();
+        score = 0;
+        gameOver = false;
+        velocityY = 0;
+        tutorialAlpha = 1.0f;
+        showTutorial = true;
+        gravityInverted = false;
+        gravity = 1;
+        pipeCounter = 0;
+
+        playBackgroundMusic("bg_normal.wav");
+        initGameTimers();
+    }
+
+    private void moveGameObjects() {
+        velocityY += gravity;
+        bird.move(velocityY);
+
+        pipes.forEach(obj -> {
+            obj.move(VELOCITY_X);
+
+            if (obj instanceof Pipe) {
+                handlePipeCollision((Pipe) obj);
+            } else if (obj instanceof GravityInverter) {
+                handleGravityInverterCollision((GravityInverter) obj);
+            }
+        });
+
+        pipes.removeIf(GameObject::isOutOfBounds);
+        if (bird.isOutOfBounds(BOARD_HEIGHT)) {
+            handleGameOver();
+        }
     }
 
     private void spawnPipes() {
@@ -122,7 +143,35 @@ public class FlappyBird extends JPanel implements ActionListener, KeyListener {
         
         pipeCounter++;
     }
-    
+
+    private void handlePipeCollision(Pipe pipe) {
+        if (!pipe.isPassed() && bird.passed(pipe)) {
+            playSound("point.wav");
+            pipe.markPassed();
+            score += 0.5;
+        }
+        if (bird.collidesWith(pipe)) {
+            handleGameOver();
+        }
+    }
+
+    private void handleGravityInverterCollision(GravityInverter inverter) {
+        if (!inverter.isPassed() && bird.collidesWith(inverter)) {
+            inverter.markPassed();
+            gravityInverted = !gravityInverted;
+            gravity = gravityInverted ? -1 : 1;
+            playBackgroundMusic(gravityInverted ? "bg_inverted.wav" : "bg_normal.wav");
+            playSound("swoosh.wav");
+        }
+    }
+
+    private void handleGameOver() {
+        playSound("die.wav");
+        gameOver = true;
+        stopTimers();
+        if (score > bestScore) bestScore = score;
+    }
+
     private void startFadeTimer() {
         fadeTimer = new Timer(50, e -> {
             tutorialAlpha = Math.max(0, tutorialAlpha - 0.05f);
@@ -134,6 +183,7 @@ public class FlappyBird extends JPanel implements ActionListener, KeyListener {
         fadeTimer.start();
     }
 
+    // Rendering
     @Override
     public void paintComponent(Graphics g) {
         super.paintComponent(g);
@@ -189,39 +239,24 @@ public class FlappyBird extends JPanel implements ActionListener, KeyListener {
         g.drawString(text, x, y);
     }
 
-    private void moveGameObjects() {
-        velocityY += gravity;
-        bird.move(velocityY);
-    
-        pipes.forEach(obj -> {
-            obj.move(VELOCITY_X);
-        
-            if (obj instanceof Pipe) {
-                Pipe pipe = (Pipe) obj;
-                if (!pipe.isPassed() && bird.passed(pipe)) {
-                    playSound("point.wav");
-                    pipe.markPassed();
-                    score += 0.5;
-                }
-                if (bird.collidesWith(pipe)) {
-                    playSound("hit.wav");
-                    gameOver = true;
-                }
-            } else if (obj instanceof GravityInverter) {
-                GravityInverter inverter = (GravityInverter) obj;
-                if (!inverter.isPassed() && bird.collidesWith(inverter)) {
-                    inverter.markPassed();
-                    gravityInverted = !gravityInverted;
-                    gravity = gravityInverted ? -1 : 1;
-                    playSound("swoosh.wav");
-                }
-            }
-        });
-        
-        pipes.removeIf(GameObject::isOutOfBounds);
-        if (bird.isOutOfBounds(BOARD_HEIGHT)) {
-            playSound("die.wav");
-            gameOver = true;
+    // Utility Methods
+    private BufferedImage loadImage(String path) {
+        try {
+            return ImageIO.read(getClass().getResource(path));
+        } catch (IOException e) {
+            e.printStackTrace();
+            return null;
+        }
+    }
+
+    private void loadCustomFont() {
+        try (InputStream fontStream = getClass().getResourceAsStream("/fonts/flappyfont.TTF")) {
+            if (fontStream == null) throw new IOException("Font file not found");
+            customFont = Font.createFont(Font.TRUETYPE_FONT, fontStream).deriveFont(32f);
+            GraphicsEnvironment.getLocalGraphicsEnvironment().registerFont(customFont);
+        } catch (FontFormatException | IOException e) {
+            System.err.println("Using default font: " + e.getMessage());
+            customFont = new Font("Arial", Font.PLAIN, 32);
         }
     }
 
@@ -238,11 +273,29 @@ public class FlappyBird extends JPanel implements ActionListener, KeyListener {
         }
     }
 
-    @Override
-    public void actionPerformed(ActionEvent e) {
-        if (!gameOver) moveGameObjects();
-        repaint();
-        if (gameOver) stopTimers();
+    private void playBackgroundMusic(String musicFile) {
+        try {
+            URL soundURL = getClass().getResource("/audio/" + musicFile);
+            if (soundURL == null) throw new IOException("Background music file not found: " + musicFile);
+            AudioInputStream audioStream = AudioSystem.getAudioInputStream(soundURL);
+            if (backgroundMusic != null && backgroundMusic.isRunning()) {
+                backgroundMusic.stop();
+                backgroundMusic.close();
+            }
+            backgroundMusic = AudioSystem.getClip();
+            backgroundMusic.open(audioStream);
+            backgroundMusic.loop(Clip.LOOP_CONTINUOUSLY);
+            backgroundMusic.start();
+        } catch (Exception e) {
+            System.err.println("Error playing background music: " + e.getMessage());
+        }
+    }
+
+    private void stopBackgroundMusic() {
+        if (backgroundMusic != null && backgroundMusic.isRunning()) {
+            backgroundMusic.stop();
+            backgroundMusic.close();
+        }
     }
 
     private void stopTimers() {
@@ -251,6 +304,13 @@ public class FlappyBird extends JPanel implements ActionListener, KeyListener {
         if (birdTimer != null) birdTimer.stop();
         if (fadeTimer != null) fadeTimer.stop();
         if (score > bestScore) bestScore = score;
+    }
+
+    // Event Handlers
+    @Override
+    public void actionPerformed(ActionEvent e) {
+        if (!gameOver) moveGameObjects();
+        repaint();
     }
 
     @Override
@@ -262,24 +322,10 @@ public class FlappyBird extends JPanel implements ActionListener, KeyListener {
         }
     }
 
-    private void resetGame() {
-        stopTimers();
-        bird.reset(BOARD_WIDTH / 8, BOARD_HEIGHT / 2);
-        pipes.clear();
-        score = 0;
-        gameOver = false;
-        velocityY = 0;
-        tutorialAlpha = 1.0f;
-        showTutorial = true;
-        gravityInverted = false;
-        gravity = 1;
-        pipeCounter = 0;
-        initGameTimers();
-    }
-
     @Override public void keyTyped(KeyEvent e) {}
     @Override public void keyReleased(KeyEvent e) {}
 
+    // Nested Class
     private static class Bird {
         private int x, y, width, height;
         private final Image[] animationFrames;
