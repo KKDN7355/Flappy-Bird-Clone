@@ -15,17 +15,18 @@ public class FlappyBird extends JPanel implements ActionListener, KeyListener {
     private static final int BOARD_WIDTH = 360;
     private static final int BOARD_HEIGHT = 640;
     private static final int VELOCITY_X = -4;
-    private static final int GRAVITY = 1;
+    private int gravity = 1;
     
     // Resources
     private BufferedImage imgGameBackground, imgGameTutorial, imgGameOver;
     private BufferedImage imgBirdA, imgBirdB, imgBirdC;
     private BufferedImage imgPipeTop, imgPipeBot;
+    private static BufferedImage imgGravityInverter;
     private Font customFont;
 
     // Game Objects
     private Bird bird;
-    private final ArrayList<Pipe> pipes = new ArrayList<>();
+    private final ArrayList<GameObject> pipes = new ArrayList<>();
 
     // Timers
     private Timer gameTimer, birdTimer, pipeTimer, fadeTimer;
@@ -37,7 +38,9 @@ public class FlappyBird extends JPanel implements ActionListener, KeyListener {
     private double score = 0;
     private double bestScore = 0;
     private boolean gameOver = false;
-
+    private boolean gravityInverted = false;
+    private int pipeCounter = 0;
+    
     public FlappyBird() {
         initUI();
         initResources();
@@ -60,6 +63,7 @@ public class FlappyBird extends JPanel implements ActionListener, KeyListener {
         imgBirdC = loadImage("/images/bird_c.png");
         imgPipeTop = loadImage("/images/pipe_top.png");
         imgPipeBot = loadImage("/images/pipe_bot.png");
+        imgGravityInverter = loadImage("/images/gravity_inverter.png");
         loadCustomFont();
     }
 
@@ -105,13 +109,20 @@ public class FlappyBird extends JPanel implements ActionListener, KeyListener {
         int pipeMaxY = -40;
         int pipeRandomY = pipeMinY + (int) (Math.random() * (pipeMaxY - pipeMinY));
         int pipeOpening = BOARD_HEIGHT / 4;
-
+    
         pipes.add(new Pipe(BOARD_WIDTH, pipeRandomY, 50, 500, imgPipeTop));
         pipes.add(new Pipe(BOARD_WIDTH, pipeRandomY + 500 + pipeOpening, 50, 500, imgPipeBot));
-
-        if (pipes.size() == 2 && showTutorial) startFadeTimer();
+        
+        if (pipeCounter % 10 == 9) {
+            int gravityInverterY = pipeRandomY + 500 + (pipeOpening / 2) - 20;
+            pipes.add(new GravityInverter(BOARD_WIDTH, gravityInverterY, 40, 40, imgGravityInverter));
+        }
+    
+        if (showTutorial) startFadeTimer();
+        
+        pipeCounter++;
     }
-
+    
     private void startFadeTimer() {
         fadeTimer = new Timer(50, e -> {
             tutorialAlpha = Math.max(0, tutorialAlpha - 0.05f);
@@ -179,23 +190,35 @@ public class FlappyBird extends JPanel implements ActionListener, KeyListener {
     }
 
     private void moveGameObjects() {
-        velocityY += GRAVITY;
+        velocityY += gravity;
         bird.move(velocityY);
-
-        pipes.forEach(pipe -> {
-            pipe.move(VELOCITY_X);
-            if (!pipe.isPassed() && bird.passed(pipe)) {
-                playSound("point.wav");
-                pipe.markPassed();
-                score += 0.5;
-            }
-            if (bird.collidesWith(pipe)) {
-                playSound("hit.wav");
-                gameOver = true;
+    
+        pipes.forEach(obj -> {
+            obj.move(VELOCITY_X);
+        
+            if (obj instanceof Pipe) {
+                Pipe pipe = (Pipe) obj;
+                if (!pipe.isPassed() && bird.passed(pipe)) {
+                    playSound("point.wav");
+                    pipe.markPassed();
+                    score += 0.5;
+                }
+                if (bird.collidesWith(pipe)) {
+                    playSound("hit.wav");
+                    gameOver = true;
+                }
+            } else if (obj instanceof GravityInverter) {
+                GravityInverter inverter = (GravityInverter) obj;
+                if (!inverter.isPassed() && bird.collidesWith(inverter)) {
+                    inverter.markPassed();
+                    gravityInverted = !gravityInverted;
+                    gravity = gravityInverted ? -1 : 1;
+                    playSound("swoosh.wav");
+                }
             }
         });
-
-        pipes.removeIf(Pipe::isOutOfBounds);
+        
+        pipes.removeIf(GameObject::isOutOfBounds);
         if (bird.isOutOfBounds(BOARD_HEIGHT)) {
             playSound("die.wav");
             gameOver = true;
@@ -234,7 +257,7 @@ public class FlappyBird extends JPanel implements ActionListener, KeyListener {
     public void keyPressed(KeyEvent e) {
         if (e.getKeyCode() == KeyEvent.VK_SPACE) {
             playSound("wing.wav");
-            velocityY = -10;
+            velocityY = gravityInverted ? 10 : -10;
             if (gameOver) resetGame();
         }
     }
@@ -248,13 +271,15 @@ public class FlappyBird extends JPanel implements ActionListener, KeyListener {
         velocityY = 0;
         tutorialAlpha = 1.0f;
         showTutorial = true;
+        gravityInverted = false;
+        gravity = 1;
+        pipeCounter = 0;
         initGameTimers();
     }
 
     @Override public void keyTyped(KeyEvent e) {}
     @Override public void keyReleased(KeyEvent e) {}
 
-    // Nested Bird Class
     private static class Bird {
         private int x, y, width, height;
         private final Image[] animationFrames;
@@ -280,10 +305,13 @@ public class FlappyBird extends JPanel implements ActionListener, KeyListener {
             currentFrame = (currentFrame + 1) % animationFrames.length;
         }
 
-        boolean collidesWith(Pipe pipe) {
-            return x < pipe.getX() + pipe.getWidth() && x + width > pipe.getX() && y < pipe.getY() + pipe.getHeight() && y + height > pipe.getY();
+        boolean collidesWith(GameObject obj) {
+            return x < obj.getX() + obj.getWidth() &&
+                   x + width > obj.getX() &&
+                   y < obj.getY() + obj.getHeight() &&
+                   y + height > obj.getY();
         }
-
+        
         boolean passed(Pipe pipe) {
             return x > pipe.getX();
         }
@@ -299,52 +327,89 @@ public class FlappyBird extends JPanel implements ActionListener, KeyListener {
         }
     }
 
-    // Nested Pipe Class
-    private static class Pipe {
-        private int x, y, width, height;
-        private final Image img;
+    private static class Pipe extends GameObject {
         private boolean passed;
-
+    
         Pipe(int x, int y, int width, int height, Image img) {
+            super(x, y, width, height, img);
+        }
+    
+        @Override
+        void move(int velocityX) {
+            x += velocityX;
+        }
+    
+        @Override
+        void draw(Graphics g) {
+            g.drawImage(img, x, y, width, height, null);
+        }
+    
+        boolean isPassed() {
+            return passed;
+        }
+    
+        void markPassed() {
+            passed = true;
+        }
+    }
+    
+    private static class GravityInverter extends GameObject {
+        private boolean passed;
+    
+        GravityInverter(int x, int y, int width, int height, Image img) {
+            super(x, y, width, height, img);
+        }
+    
+        @Override
+        void move(int velocityX) {
+            x += velocityX;
+        }
+    
+        @Override
+        void draw(Graphics g) {
+            g.drawImage(img, x, y, width, height, null);
+        }
+    
+        boolean isPassed() {
+            return passed;
+        }
+    
+        void markPassed() {
+            passed = true;
+        }
+    }
+    
+    static abstract class GameObject {
+        protected int x, y, width, height;
+        protected final Image img;
+    
+        GameObject(int x, int y, int width, int height, Image img) {
             this.x = x;
             this.y = y;
             this.width = width;
             this.height = height;
             this.img = img;
         }
-
-        void draw(Graphics g) {
-            g.drawImage(img, x, y, width, height, null);
-        }
-
-        void move(int velocityX) {
-            x += velocityX;
-        }
-
-        boolean isPassed() {
-            return passed;
-        }
-
-        void markPassed() {
-            passed = true;
-        }
-
+    
+        abstract void move(int velocityX);
+        abstract void draw(Graphics g);
+    
         boolean isOutOfBounds() {
             return x + width < 0;
         }
-
+    
         int getX() {
             return x;
         }
-
+    
         int getY() {
             return y;
         }
-
+    
         int getWidth() {
             return width;
         }
-
+    
         int getHeight() {
             return height;
         }
