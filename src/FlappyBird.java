@@ -1,42 +1,42 @@
 import java.awt.*;
 import java.awt.event.*;
-import java.util.ArrayList;
+import java.awt.image.BufferedImage;
 import javax.swing.*;
+import javax.imageio.ImageIO;
+import javax.sound.sampled.*;
 import java.io.IOException;
 import java.io.InputStream;
-import java.awt.image.BufferedImage;
-import javax.imageio.ImageIO;
+import java.net.URL;
+import java.util.ArrayList;
 
 public class FlappyBird extends JPanel implements ActionListener, KeyListener {
-    private final int boardWidth = 360;
-    private final int boardHeight = 640;
-    private final int gravity = 1;
-    private final int velocityX = -4;
 
-    private BufferedImage imgGameBackground;
-    private BufferedImage imgGameTutorial;
-    private BufferedImage imgGameOver;
+    // Constants
+    private static final int BOARD_WIDTH = 360;
+    private static final int BOARD_HEIGHT = 640;
+    private static final int VELOCITY_X = -4;
+    private static final int GRAVITY = 1;
+    
+    // Resources
+    private BufferedImage imgGameBackground, imgGameTutorial, imgGameOver;
+    private BufferedImage imgBirdA, imgBirdB, imgBirdC;
+    private BufferedImage imgPipeTop, imgPipeBot;
+    private Font customFont;
 
-    private BufferedImage imgBirdA;
-    private BufferedImage imgBirdB;
-    private BufferedImage imgBirdC;
-
-    private BufferedImage imgPipeTop;
-    private BufferedImage imgPipeBot;
-
+    // Game Objects
     private Bird bird;
     private final ArrayList<Pipe> pipes = new ArrayList<>();
 
-    private Timer gameLoop;
-    private Timer birdAnimationTimer;
-    private Timer pipeTimer;
+    // Timers
+    private Timer gameTimer, birdTimer, pipeTimer, fadeTimer;
 
-    private Font customFont;
-
+    // Game State
     private int velocityY = 0;
-    private boolean gameOver = false;
     private boolean showTutorial = true;
+    private float tutorialAlpha = 1.0f;
     private double score = 0;
+    private double bestScore = 0;
+    private boolean gameOver = false;
 
     public FlappyBird() {
         initUI();
@@ -46,7 +46,7 @@ public class FlappyBird extends JPanel implements ActionListener, KeyListener {
     }
 
     private void initUI() {
-        setPreferredSize(new Dimension(boardWidth, boardHeight));
+        setPreferredSize(new Dimension(BOARD_WIDTH, BOARD_HEIGHT));
         setFocusable(true);
         addKeyListener(this);
     }
@@ -55,40 +55,12 @@ public class FlappyBird extends JPanel implements ActionListener, KeyListener {
         imgGameBackground = loadImage("/images/game_background.png");
         imgGameTutorial = loadImage("/images/game_tutorial.png");
         imgGameOver = loadImage("/images/game_over.png");
-        imgPipeTop = loadImage("/images/pipe_top.png");
-        imgPipeBot = loadImage("/images/pipe_bot.png");
         imgBirdA = loadImage("/images/bird_a.png");
         imgBirdB = loadImage("/images/bird_b.png");
         imgBirdC = loadImage("/images/bird_c.png");
-        initCustomFont();
-    }
-
-    private void initGameObjects() {
-        int birdWidth = imgBirdB.getWidth() * 2 / 3;
-        int birdHeight = imgBirdB.getHeight() * 2 / 3;
-        bird = new Bird(boardWidth / 8, boardHeight / 2, birdWidth, birdHeight, imgBirdA, imgBirdB, imgBirdC);
-    }
-
-    private void initGameTimers() {
-        pipeTimer = new Timer(1800, e -> placePipes());
-        pipeTimer.start();
-
-        gameLoop = new Timer(1000 / 60, this);
-        gameLoop.start();
-
-        birdAnimationTimer = new Timer(100, e -> bird.nextFrame());
-        birdAnimationTimer.start();
-    }
-
-    private void initCustomFont() {
-        try (InputStream fontStream = getClass().getResourceAsStream("/fonts/flappyfont.TTF")) {
-            if (fontStream == null) throw new IOException("Font file not found");
-            customFont = Font.createFont(Font.TRUETYPE_FONT, fontStream).deriveFont(32f);
-            GraphicsEnvironment.getLocalGraphicsEnvironment().registerFont(customFont);
-        } catch (FontFormatException | IOException e) {
-            System.err.println("Using default font: " + e.getMessage());
-            customFont = new Font("Arial", Font.PLAIN, 32);
-        }
+        imgPipeTop = loadImage("/images/pipe_top.png");
+        imgPipeBot = loadImage("/images/pipe_bot.png");
+        loadCustomFont();
     }
 
     private BufferedImage loadImage(String path) {
@@ -100,16 +72,55 @@ public class FlappyBird extends JPanel implements ActionListener, KeyListener {
         }
     }
 
-    private void placePipes() {
+    private void loadCustomFont() {
+        try (InputStream fontStream = getClass().getResourceAsStream("/fonts/flappyfont.TTF")) {
+            if (fontStream == null) throw new IOException("Font file not found");
+            customFont = Font.createFont(Font.TRUETYPE_FONT, fontStream).deriveFont(32f);
+            GraphicsEnvironment.getLocalGraphicsEnvironment().registerFont(customFont);
+        } catch (FontFormatException | IOException e) {
+            System.err.println("Using default font: " + e.getMessage());
+            customFont = new Font("Arial", Font.PLAIN, 32);
+        }
+    }
+
+    private void initGameObjects() {
+        int birdWidth = imgBirdB.getWidth() * 2 / 3;
+        int birdHeight = imgBirdB.getHeight() * 2 / 3;
+        bird = new Bird(BOARD_WIDTH / 8, BOARD_HEIGHT / 2, birdWidth, birdHeight, imgBirdA, imgBirdB, imgBirdC);
+    }
+
+    private void initGameTimers() {
+        pipeTimer = new Timer(1800, e -> spawnPipes());
+        pipeTimer.start();
+
+        gameTimer = new Timer(1000 / 60, this);
+        gameTimer.start();
+
+        birdTimer = new Timer(100, e -> bird.nextFrame());
+        birdTimer.start();
+    }
+
+    private void spawnPipes() {
         int pipeMinY = -480;
         int pipeMaxY = -40;
         int pipeRandomY = pipeMinY + (int) (Math.random() * (pipeMaxY - pipeMinY));
-        int pipeOpening = boardHeight / 4;
+        int pipeOpening = BOARD_HEIGHT / 4;
 
-        pipes.add(new Pipe(boardWidth, pipeRandomY, 50, 500, imgPipeTop));
-        pipes.add(new Pipe(boardWidth, pipeRandomY + 500 + pipeOpening, 50, 500, imgPipeBot));
+        pipes.add(new Pipe(BOARD_WIDTH, pipeRandomY, 50, 500, imgPipeTop));
+        pipes.add(new Pipe(BOARD_WIDTH, pipeRandomY + 500 + pipeOpening, 50, 500, imgPipeBot));
 
-        if (pipes.size() > 1) showTutorial = false;
+        if (pipes.size() == 2 && showTutorial) startFadeTimer();
+    }
+
+    private void startFadeTimer() {
+        fadeTimer = new Timer(50, e -> {
+            tutorialAlpha = Math.max(0, tutorialAlpha - 0.05f);
+            if (tutorialAlpha <= 0) {
+                showTutorial = false;
+                fadeTimer.stop();
+            }
+        });
+        fadeTimer.start();
     }
 
     @Override
@@ -119,29 +130,34 @@ public class FlappyBird extends JPanel implements ActionListener, KeyListener {
     }
 
     private void drawGame(Graphics g) {
-        int gameTutorialWidth = imgGameTutorial.getWidth() * 2 / 3;
-        int gameTutorialHeight = imgGameTutorial.getHeight() * 2 / 3;
-        int gameTutorialX = (boardWidth - gameTutorialWidth) / 2;
-        int gameTutorialY = (boardHeight - gameTutorialHeight) / 2;
+        int tutorialWidth = imgGameTutorial.getWidth() * 2 / 3;
+        int tutorialHeight = imgGameTutorial.getHeight() * 2 / 3;
+        int tutorialX = (BOARD_WIDTH - tutorialWidth) / 2;
+        int tutorialY = (BOARD_HEIGHT - tutorialHeight) / 2;
 
         int gameOverWidth = imgGameOver.getWidth() * 2 / 3;
         int gameOverHeight = imgGameOver.getHeight() * 2 / 3;
-        int gameOverX = (boardWidth - gameOverWidth) / 2;
-        int gameOverY = gameTutorialY;
+        int gameOverX = (BOARD_WIDTH - gameOverWidth) / 2;
+        int gameOverY = (BOARD_HEIGHT - tutorialHeight) / 2;
 
-        g.drawImage(imgGameBackground, 0, 0, boardWidth, boardHeight, null);
+        Graphics2D g2d = (Graphics2D) g;
+        g.drawImage(imgGameBackground, 0, 0, BOARD_WIDTH, BOARD_HEIGHT, null);
 
         if (gameOver) {
             g.drawImage(imgGameOver, gameOverX, gameOverY, gameOverWidth, gameOverHeight, null);
-            drawCenteredText(g, "Score: " + (int) score, gameOverY + gameOverHeight + 50, customFont.deriveFont(36f));
+            drawRightAlignedText(g, "Last Score: " + (int) score, gameOverY + gameOverHeight + 50, customFont.deriveFont(36f));
+            drawRightAlignedText(g, "Best Score: " + (int) bestScore, gameOverY + gameOverHeight + 100, customFont.deriveFont(36f));
         } else {
-            bird.draw(g);
-            if (showTutorial) {
-                g.drawImage(imgGameTutorial, gameTutorialX, gameTutorialY, gameTutorialWidth, gameTutorialHeight, null);
+            bird.draw(g2d);
+            pipes.forEach(pipe -> pipe.draw(g2d));
+
+            if (tutorialAlpha > 0) {
+                g2d.setComposite(AlphaComposite.getInstance(AlphaComposite.SRC_OVER, tutorialAlpha));
+                g2d.drawImage(imgGameTutorial, tutorialX, tutorialY, tutorialWidth, tutorialHeight, null);
+                g2d.setComposite(AlphaComposite.getInstance(AlphaComposite.SRC_OVER, 1.0f));
             }
-            pipes.forEach(pipe -> pipe.draw(g));
             if (!showTutorial) {
-                drawCenteredText(g, "Score: " + (int) score, boardHeight / 8, customFont.deriveFont(36f));
+                drawCenteredText(g2d, "Score: " + (int) score, BOARD_HEIGHT / 8, customFont.deriveFont(36f));
             }
         }
     }
@@ -150,26 +166,53 @@ public class FlappyBird extends JPanel implements ActionListener, KeyListener {
         g.setFont(font);
         g.setColor(Color.WHITE);
         FontMetrics metrics = g.getFontMetrics(font);
-        int textWidth = metrics.stringWidth(text);
-        int x = (boardWidth - textWidth) / 2;
+        int x = (BOARD_WIDTH - metrics.stringWidth(text)) / 2;
+        g.drawString(text, x, y);
+    }
+
+    private void drawRightAlignedText(Graphics g, String text, int y, Font font) {
+        g.setFont(font);
+        g.setColor(Color.WHITE);
+        FontMetrics metrics = g.getFontMetrics(font);
+        int x = BOARD_WIDTH - metrics.stringWidth(text) - 50;
         g.drawString(text, x, y);
     }
 
     private void moveGameObjects() {
-        velocityY += gravity;
+        velocityY += GRAVITY;
         bird.move(velocityY);
 
         pipes.forEach(pipe -> {
-            pipe.move(velocityX);
+            pipe.move(VELOCITY_X);
             if (!pipe.isPassed() && bird.passed(pipe)) {
+                playSound("point.wav");
                 pipe.markPassed();
                 score += 0.5;
             }
-            if (bird.collidesWith(pipe)) gameOver = true;
+            if (bird.collidesWith(pipe)) {
+                playSound("hit.wav");
+                gameOver = true;
+            }
         });
 
-        pipes.removeIf(pipe -> pipe.isOutOfBounds());
-        if (bird.isOutOfBounds(boardHeight)) gameOver = true;
+        pipes.removeIf(Pipe::isOutOfBounds);
+        if (bird.isOutOfBounds(BOARD_HEIGHT)) {
+            playSound("die.wav");
+            gameOver = true;
+        }
+    }
+
+    private void playSound(String soundFilePath) {
+        try {
+            URL soundURL = getClass().getResource("/audio/" + soundFilePath);
+            if (soundURL == null) throw new IOException("Sound file not found");
+            AudioInputStream audioStream = AudioSystem.getAudioInputStream(soundURL);
+            Clip clip = AudioSystem.getClip();
+            clip.open(audioStream);
+            clip.start();
+        } catch (Exception e) {
+            System.err.println("Error playing sound: " + e.getMessage());
+        }
     }
 
     @Override
@@ -180,34 +223,38 @@ public class FlappyBird extends JPanel implements ActionListener, KeyListener {
     }
 
     private void stopTimers() {
-        birdAnimationTimer.stop();
-        pipeTimer.stop();
-        gameLoop.stop();
+        if (pipeTimer != null) pipeTimer.stop();
+        if (gameTimer != null) gameTimer.stop();
+        if (birdTimer != null) birdTimer.stop();
+        if (fadeTimer != null) fadeTimer.stop();
+        if (score > bestScore) bestScore = score;
     }
 
     @Override
     public void keyPressed(KeyEvent e) {
         if (e.getKeyCode() == KeyEvent.VK_SPACE) {
+            playSound("wing.wav");
             velocityY = -10;
             if (gameOver) resetGame();
         }
     }
 
     private void resetGame() {
-        bird.reset(boardWidth / 8, boardHeight / 2);
+        stopTimers();
+        bird.reset(BOARD_WIDTH / 8, BOARD_HEIGHT / 2);
         pipes.clear();
         score = 0;
         gameOver = false;
         velocityY = 0;
+        tutorialAlpha = 1.0f;
+        showTutorial = true;
         initGameTimers();
     }
 
-    @Override
-    public void keyTyped(KeyEvent e) {}
+    @Override public void keyTyped(KeyEvent e) {}
+    @Override public void keyReleased(KeyEvent e) {}
 
-    @Override
-    public void keyReleased(KeyEvent e) {}
-
+    // Nested Bird Class
     private static class Bird {
         private int x, y, width, height;
         private final Image[] animationFrames;
@@ -238,7 +285,7 @@ public class FlappyBird extends JPanel implements ActionListener, KeyListener {
         }
 
         boolean passed(Pipe pipe) {
-            return x > pipe.getX() + pipe.getWidth();
+            return x > pipe.getX();
         }
 
         void reset(int startX, int startY) {
@@ -252,6 +299,7 @@ public class FlappyBird extends JPanel implements ActionListener, KeyListener {
         }
     }
 
+    // Nested Pipe Class
     private static class Pipe {
         private int x, y, width, height;
         private final Image img;
