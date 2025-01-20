@@ -8,8 +8,6 @@ These instructions will get you a copy of the project up and running on your loc
 
 ### Prerequisites
 
-What things you need to install the software and how to install them:
-
 - **Java Development Kit (JDK)**: Ensure Java 8 or later is installed.
 
 ```
@@ -21,8 +19,6 @@ Download and install from https://www.oracle.com/java/technologies/javase-downlo
 ```
 
 ### Installing
-
-A step-by-step series of instructions to get a development environment running:
 
 1. Clone the repository:
    ```bash
@@ -40,11 +36,7 @@ A step-by-step series of instructions to get a development environment running:
    java FlappyBird
    ```
 
-End with a demonstration of launching the game and seeing the bird fly.
-
 ## Running the tests
-
-Explain how to run the automated tests for this system:
 
 ### Break down into end-to-end tests
 
@@ -61,8 +53,6 @@ java -jar checkstyle-8.45-all.jar -c /google_checks.xml FlappyBird.java
 
 ## Deployment
 
-Add additional notes about how to deploy this on a live system. For example:
-
 - Package the application into a JAR file for easier distribution:
   ```bash
   jar cvfe FlappyBirdClone.jar FlappyBird *.class
@@ -75,8 +65,6 @@ Add additional notes about how to deploy this on a live system. For example:
 * **Java AWT** - For event handling and rendering
 
 ## Future Additions
-
-Here are some planned features and improvements:
 
 - **Leaderboard Integration**:
   - Save and display high scores locally or online.
