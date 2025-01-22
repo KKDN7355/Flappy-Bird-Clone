@@ -36,13 +36,13 @@ Download and install from https://www.oracle.com/java/technologies/javase-downlo
    java FlappyBird
    ```
 
-## Running the tests
+## Running the Tests
 
-### Break down into end-to-end tests
+### Break Down Into End-to-End Tests
 
 Currently, this project does not include automated testing. In future versions, test cases can be added using JUnit or similar frameworks.
 
-### And coding style tests
+### And Coding Style Tests
 
 To ensure code consistency, follow Java standard naming conventions and use tools like Checkstyle for analysis.
 
