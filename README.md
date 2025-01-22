@@ -81,12 +81,6 @@ java -jar checkstyle-8.45-all.jar -c /google_checks.xml FlappyBird.java
 - **Mobile Compatibility**:
   - Adapt the game for touchscreens and smaller resolutions.
 
-- **Soundtrack**:
-  - Add a background soundtrack to complement the sound effects.
-
-- **Deploy**:
-  - Will finally then deploy on itch.io.
-
 ## License
 
 This project is licensed under the MIT License - see the [LICENSE.md](LICENSE.md) file for details.
